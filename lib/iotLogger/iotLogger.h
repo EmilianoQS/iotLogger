@@ -9,10 +9,12 @@
 #define iotMillis()         millis()                           /* millis() Macro wrapper */
 #define iotDelay(...)       delay(__VA_ARGS__)                 /* Delay wrapper */
 
-enum {  
-    NO_TIMESTAMP,       /* No time-stamp provided by user (time-log disabled).                      */
-    AUTO_TIMESTAMP,     /* Time-stamp generated automatically using millis() function.              */
-    USER_TIMESTAMP      /* User provided time-stamp. Recommended use of "epoch" type times-stamp    */ 
+enum ts_mode {  
+    NO_TIMESTAMP,       /* No time-stamp provided by user (time-log disabled).                     */
+    AUTO_TIMESTAMP,     /* Time-stamp generated automatically (using millis() function).           */
+    USER_TIMESTAMP,     /* User provided time-stamp. Recommended use of "epoch" type time-stamp    */ 
+    // NO_PERSISTENCE,     /* No file persistence for the logger (just stored in ram) */
+    // FILE_PERSISTENCE    /* Uses SPIFFS for file persistence*/
 };
 
 enum iotLogger_errno {
@@ -32,12 +34,12 @@ class   iotLogger;
 
 class iotLogger{
 
-    //Corregir variables que deben ser privadas.
-
+    private :
     const char*     FILE_NAME;                /* File-name */
     float*          D_BUFFER;                 /* Data buffer */
     unsigned long*  TS_BUFFER;                /* Time-stamp buffer */
     uint16_t        BUFFER_SIZE;              /* Size of data buffer (number of elements). Also of time-stamp buffer */
+    ts_mode         TS_MODE;                  /* Time-Stamp mode */
 
     /**** Control Variables ****/
     float           consumed_data = __FLT_MAX__;
@@ -46,14 +48,18 @@ class iotLogger{
     bool            buffer_isCircular = false; /* TRUE if buffer is in circular mode (store index restarted to 0) */
     bool            consume_isCircular = false;/* TRUE if consume_index has reached end of buffer and restarted from 0 */
     bool            buffer_isPopped = false;   /* Marks if items has been popped off the buffer */
-    
 
     public:
-    iotLogger(uint16_t BUFFER_SIZE, const char* FILE_NAME, uint8_t TS_MODE);
+    iotLogger(  uint16_t BUFFER_SIZE,   /* Number of elements to store (used memory x2.5 this value) */
+                const char* FILE_NAME,  /* Name of the file to store logs*/
+                ts_mode TS_MODE     /**/
+            );
+
     bool init();
     void end();
     void add(float data = 0, unsigned long timestamp = 0);
     bool getOldest(float &data_out, unsigned long &timestamp_out, bool peek = false);
+    bool getOldest(float &data_out, bool peek = false);
     bool getItem(uint16_t index, float* data_out, unsigned long* timestamp_out);   //TODO
     uint8_t isData(unsigned long timestamp); //TODO
 
@@ -65,7 +71,6 @@ class iotLogger{
 
     void incDataIndex();
     void incConsumeIndex();
-    void checkConsumeIndex();
     uint16_t searchValidIndex();
     void resetBuffer();
     bool isValidData(uint16_t index);
@@ -74,4 +79,10 @@ class iotLogger{
 
     void setErrno(iotLogger_errno errno,uint8_t error_level = VERBOSE);
 
+};
+
+class iotLoggertoSPIFFS : public iotLogger{
+
+   public:
+   void empty(); 
 };

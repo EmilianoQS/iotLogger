@@ -84,6 +84,9 @@ void loop() {
     Serial.print(data);
   }
   Logger.dumpBuffer();
+
+  Logger.getOldest(data);
+
   // Serial.print("\n Filling buffer (7) \n");
   // for(i = 0; i<7 ; i++){
 

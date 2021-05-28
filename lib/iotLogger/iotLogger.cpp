@@ -1,11 +1,11 @@
 #include "iotLogger.h"
 
 
-iotLogger::iotLogger(uint16_t BUFFER_SIZE,const char* FILE_NAME, uint8_t TS_MODE){
+iotLogger::iotLogger(uint16_t BUFFER_SIZE,const char* FILE_NAME, ts_mode TS_MODE){
 
     this->BUFFER_SIZE = BUFFER_SIZE;
     this->FILE_NAME = FILE_NAME;
-
+    this->TS_MODE = TS_MODE; 
 }
 
 bool iotLogger::init(){
@@ -13,7 +13,8 @@ bool iotLogger::init(){
     // D_BUFFER = (float*)malloc(BUFFER_SIZE * sizeof(float));
     D_BUFFER = (float*)calloc(BUFFER_SIZE,sizeof(float));           //Allocates and initialize DATA buffer
 
-    TS_BUFFER = (unsigned long*)calloc(BUFFER_SIZE,sizeof(float));  //Allocates and initialize TIMESTAMP buffer
+    if(TS_MODE != NO_TIMESTAMP)
+        TS_BUFFER = (unsigned long*)calloc(BUFFER_SIZE,sizeof(float));  //Allocates and initialize TIMESTAMP buffer
 
 	if (D_BUFFER == NULL)
 	{
@@ -26,21 +27,30 @@ bool iotLogger::init(){
 
 void iotLogger::end(){
     free(D_BUFFER);
+    if(TS_MODE != NO_TIMESTAMP)
+        free(TS_BUFFER);
 }
 
 void iotLogger::add(float data, unsigned long timestamp){
     D_BUFFER[store_index] = data;
-    TS_BUFFER[store_index] = timestamp;
-    
-    // Serial.print("\nAdding #Data: ");
-    // Serial.print(data);
-    // Serial.print("    #Timestamp: ");
-    // Serial.print(timestamp);
-    // Serial.print("    #store_index: ");
-    // Serial.print(store_index);
-    // Serial.print("    #consume_index: ");
-    // Serial.print(consume_index);
     incDataIndex();
+
+    switch (TS_MODE)
+    {
+        case NO_TIMESTAMP:
+            return;
+        break;
+        
+        case AUTO_TIMESTAMP:
+            TS_BUFFER[store_index] = iotMillis();
+        break;
+
+        case USER_TIMESTAMP:
+            TS_BUFFER[store_index] = timestamp;
+        break;
+    }
+
+    return;
 }
 
 /**
@@ -71,16 +81,133 @@ bool iotLogger::getOldest(float &data_out,unsigned long &timestamp_out, bool pee
     return true;
 }
 
-
-bool iotLogger::getItem(uint16_t index, float* data_out, unsigned long* timestamp_out){
-
-    if(isValidData(index)){
-        //Devolvemos los index
+bool iotLogger::getOldest(float &data_out, bool peek){
+    //Checks if data is avaiable, if not, returns false.
+    if(!dataAvailable()){
+        setErrno(BUFFER_EMPTY,WARNING);
+        return false;
     }
+    // Serial.print(D_BUFFER[consume_index]);
+    // Serial.print(TS_BUFFER[consume_index]);
+    data_out = D_BUFFER[consume_index];
+    D_BUFFER[consume_index] = consumed_data;    //Stores consumed marker in consumed index.
+
+    if(!peek){
+        incConsumeIndex();
+    }
+    return true;
+}
+/**
+ * @brief Searchs for the provided data in the buffer. If it exists, stores
+ *        its timestamp in the passed variables. If data is not found, returns FALSE.
+ *        If peek = FALSE, this function will remove the data from the buffer. That
+ *        causes and overhead on every other fetch operation over this buffer (getOldest())
+ *        until bufferDefrag() is used.
+ *        Returns oldest log found.
+ * 
+ * @param timestamp_out Variable to store timestamp if found.
+ * @param data_in Data to search.
+ * @param peek TRUE -> Does not deletes the data from buffer (FAST). FALSE -> Deletes data (SLOW).
+ * @return true -> Data found on the buffer and loaded on variables
+ * @return false -> Data not found.
+ */
+bool iotLogger::popWhereData(unsigned long &timestamp_out, float data_in, bool peek){
+
+    if(TS_MODE == NO_TIMESTAMP){
+        setErrno(NO_TS_UNAVAILABLE, WARNING);
+        return false;
+    }
+    uint16_t data_index = (BUFFER_SIZE+1);
+    //Because we want to retrieve the oldest match, we start from consume_index to the future.
+    for(uint16_t i = consume_index ; i<BUFFER_SIZE ; i++){
+        if(D_BUFFER[i] == data_in){
+            data_index = i;
+            break;
+        }
+    }
+    if(data_index == (BUFFER_SIZE+1) ){
+        for(uint16_t i = 0 ; i < consume_index ; i++){
+            if(D_BUFFER[i] == data_in){
+                data_index = i;
+            break;
+            }
+        }
+    }
+
+    if(data_index == (BUFFER_SIZE+1) ){
+        setErrno(NOT_FOUND, VERBOSE);
+        return false;
+    }
+    timestamp_out = TS_BUFFER[data_index];
+
+    if(peek){
+        return true;
+    }
+
+    D_BUFFER[data_index] = consumed_data;
+    buffer_isPopped = true;
 
     return true;
 }
 
+/**
+ * @brief Searchs for the provided timestamp in the buffer. If it exists, stores
+ *        its data in the passed variables. If timestamp is not found, returns FALSE.
+ *        If peek = FALSE, this function will remove the data from the buffer. That
+ *        causes and overhead on every other fetch operation over this buffer (getOldest())
+ *        until bufferDefrag() is used.
+ *        Returns oldest log found.
+ * 
+ * @param data_out Variable to store data if found
+ * @param timestamp_in Timestamp to search in the buffer.
+ * @param peek TRUE -> Doesn't delete data from buffer
+ * @return true 
+ * @return false 
+ */
+bool iotLogger::popWhereTimestamp(float &data_out, unsigned long timestamp_in, bool peek){
+    if(TS_MODE == NO_TIMESTAMP){
+        setErrno(NO_TS_UNAVAILABLE, WARNING);
+        return false;
+    }
+
+    uint16_t timestamp_index = (BUFFER_SIZE+1);
+    for(uint16_t i = consume_index ; i<BUFFER_SIZE ; i++){
+        if(TS_BUFFER[i] == timestamp_in){
+            //We must check validData because we mark consumed data only in D_BUFFER.
+            if(isValidData(i)){
+                timestamp_index = i;
+                break;
+            }
+            continue;
+        }
+    }
+    if(timestamp_index == (BUFFER_SIZE+1) ){
+        for(uint16_t i = 0 ; i < consume_index ; i++){
+            if(TS_BUFFER[i] == timestamp_in){
+                if(isValidData(i)){
+                    timestamp_index = i;
+                    break;
+                }
+                continue;
+            }
+        }
+    }
+
+    if(timestamp_index == (BUFFER_SIZE+1) ){
+        setErrno(NOT_FOUND, VERBOSE);
+        return false;
+    }
+    data_out = D_BUFFER[timestamp_index];
+
+    if(peek){
+        return true;
+    }
+
+    D_BUFFER[timestamp_index] = consumed_data;
+    buffer_isPopped = true;
+
+    return true;
+}
 
 /**
  * @brief Prints to console the content of the buffer. It can print just a part of 
@@ -115,7 +242,11 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
     iotPRINTv(buffer_isCircular);
     iotPRINT("\n # consume_isCircular = ");
     iotPRINTv(consume_isCircular);
-    iotPRINT("\n # INDEX #            # TIME-STAMP #             # DATA # ");
+    if(TS_MODE == NO_TIMESTAMP){
+        iotPRINT("\n # INDEX #            # ########## #             # DATA # ");
+    }else{
+        iotPRINT("\n # INDEX #            # TIME-STAMP #             # DATA # ");
+    }
     for(uint16_t i = start ; i<= end; i++){
         //If chunk_size = 0, we print everything in one chunk.
         if( (chunk_size != 0) && (printedlogs >= chunk_size) ){
@@ -138,7 +269,12 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
         iotPRINT("\n     ");
         iotPRINTv(i);
         iotPRINT("                     ");
-        iotPRINTv(TS_BUFFER[i]);
+        if(TS_MODE == NO_TIMESTAMP){
+            iotPRINT("________");
+        }else{
+            iotPRINTv(TS_BUFFER[i]);
+        }
+
         iotPRINT("                     ");
         iotPRINTv(D_BUFFER[i]);
         // Serial.print("\n#Data: ");
@@ -203,6 +339,11 @@ bool iotLogger::dataAvailable(){
 }
 //////////////////// PRIVATE ///////////////////////
 
+/**
+ * @brief Increments the data index, checks for buffer max size (circular),
+ *        and resets indexes as needed.
+ * 
+ */
 void iotLogger::incDataIndex(){
 
     /* Possible cases:
@@ -218,16 +359,16 @@ void iotLogger::incDataIndex(){
 
    if(!buffer_isCircular){
        //NOT Circular buffer
-       if( (store_index+1) >= BUFFER_SIZE ){
+        if( (store_index+1) >= BUFFER_SIZE ){
            store_index = 0;
            buffer_isCircular = true;
            return;
-       }
-       //If not in the last position, just increment.
-       store_index++;
-       return;
-   }else{
-       //Circular buffer
+        }
+        //If not in the last position, just increment.
+        store_index++;
+        return;
+    }else{
+        //Circular buffer
         if( (store_index+1) >= BUFFER_SIZE ){
             //If both indexes where together, they must keep together.
             if(store_index == consume_index){
@@ -235,25 +376,20 @@ void iotLogger::incDataIndex(){
             }
             store_index = 0;
             return;
-       }
-       //If both indexes where together, they must keep together.
-       if(store_index == consume_index){
-           consume_index++;
-       }
+        }
+        //If both indexes where together, they must keep together.
+        if(store_index == consume_index){
+            consume_index++;
+        }
        store_index++;
        return;
-   }
-   return;
-}
-
-void iotLogger::checkConsumeIndex(){
-
+    }
+    return;
 }
 
 /**
- * @brief Increments consume index. If it matches store index, that means the buffer
- * has been entirely consumed. So it resets indexes and other variables.
- * 
+ * @brief Increments consume index. And checks if it's necessary to reset
+ *        the buffer, update control variables, etc.
  */
 void iotLogger::incConsumeIndex(){
 
@@ -275,66 +411,66 @@ void iotLogger::incConsumeIndex(){
     */
 
    if(!buffer_isCircular){
-       //NOT Circular buffer
-       //Consume can't be circular!
-       if( (consume_index+1) == store_index){
-           resetBuffer();
-           return;
-       }
-       if( (consume_index+1) < store_index ){
-           consume_index++;
-           return;
-       }
-   }else{
-        // Serial.print("\n#incConsumeIndex => Circular buffer");
-       //Circular buffer
-       if(!consume_isCircular){
-           //NOT consume circular
-           if( (consume_index+1) == BUFFER_SIZE ){
-               consume_index = 0;
-                if(consume_index == store_index){
-                   resetBuffer();
-                   return;
-               }
-               consume_isCircular = true;
-               return;
-           }
+        //NOT Circular buffer
+        //Consume can't be circular!
+        if( (consume_index+1) == store_index){
+            resetBuffer();
+            return;
+        }
+        if( (consume_index+1) < store_index ){
             consume_index++;
             return;
-       }else{
-            // Serial.print("\n#incConsumeIndex => YES circular consume");
-           //Circular consume
-           if( (consume_index+1) == store_index ){
-               resetBuffer();
-               return;
-           }
-           if( (consume_index+1) == BUFFER_SIZE ){
-               consume_index = 0;
-               if(consume_index == store_index){
-                   resetBuffer();
-                   return;
-               }
-           }
-           if( (consume_index+1) < store_index ){
-               uint16_t temporalConsumeIndex = searchValidIndex();
-               if(temporalConsumeIndex == (BUFFER_SIZE+1) ){
-                   //No valid data found in the buffer.
-                    // Serial.print("\nsearchValidIndex(): ");
-                    // Serial.print(temporalConsumeIndex);
-                   resetBuffer();
-                   return;
-               }
-                // Serial.print("\n#incConsumeIndex => After searchValidIndex error check");
-               consume_index = temporalConsumeIndex;
-                // if(consume_index == store_index){
-                //    resetBuffer();
-                //    return;
-                // }
-               return;
-           }
-       }
-   }
-   return; //To avoid warning.
+        }
+    }else{
+        // Serial.print("\n#incConsumeIndex => Circular buffer");
+        //Circular buffer
+        if(!consume_isCircular){
+            //NOT consume circular
+            if( (consume_index+1) == BUFFER_SIZE ){
+                consume_index = 0;
+                    if(consume_index == store_index){
+                    resetBuffer();
+                    return;
+                }
+                consume_isCircular = true;
+                return;
+            }
+                consume_index++;
+                return;
+        }else{
+                // Serial.print("\n#incConsumeIndex => YES circular consume");
+            //Circular consume
+            if( (consume_index+1) == store_index ){
+                resetBuffer();
+                return;
+            }
+            if( (consume_index+1) == BUFFER_SIZE ){
+                consume_index = 0;
+                if(consume_index == store_index){
+                    resetBuffer();
+                    return;
+                }
+            }
+            if( (consume_index+1) < store_index ){
+                uint16_t temporalConsumeIndex = searchValidIndex();
+                if(temporalConsumeIndex == (BUFFER_SIZE+1) ){
+                    //No valid data found in the buffer.
+                        // Serial.print("\nsearchValidIndex(): ");
+                        // Serial.print(temporalConsumeIndex);
+                    resetBuffer();
+                    return;
+                }
+                    // Serial.print("\n#incConsumeIndex => After searchValidIndex error check");
+                consume_index = temporalConsumeIndex;
+                    // if(consume_index == store_index){
+                    //    resetBuffer();
+                    //    return;
+                    // }
+                return;
+            }
+        }
+    }
+    return; //To avoid warning.
 }
 
 /**
@@ -368,6 +504,11 @@ uint16_t iotLogger::searchValidIndex(){
 
 }
 
+/**
+ * @brief Resets the buffer (just Data buffer, no time-stamp buffer) and
+ *        all control variables.
+ * 
+ */
 void iotLogger::resetBuffer(void){
     Serial.print("\n resetBuffer() => CALLED\n");
     store_index = 0;
@@ -378,7 +519,8 @@ void iotLogger::resetBuffer(void){
 
     for(uint16_t i=0; i<BUFFER_SIZE; i++){
         D_BUFFER[i] = 0;
-        TS_BUFFER[i] = 0;
+        if(TS_MODE != NO_TIMESTAMP)
+            TS_BUFFER[i] = 0;
     }
 }
 
