@@ -18,7 +18,7 @@ enum {
 enum iotLogger_errno {
     BUF_INIT_ERROR,     /* Error allocating buffer in memory (HEAP) */
     STORAGE_INIT_ERROR, /* Error starting SPIFFS file-system */
-    BUFFER_CORRUPTED,   /* Found buffer data corruption.*/
+    UNEXPECTED_ERROR,   /* Found buffer data corruption.*/
     CRITICAL,
     BUFFER_EMPTY,       /* Buffer is empty */
     INDEX_OUT_OF_RANGE, /* Entered index is out of range */
@@ -40,9 +40,11 @@ class iotLogger{
     uint16_t        BUFFER_SIZE;              /* Size of data buffer (number of elements). Also of time-stamp buffer */
 
     /**** Control Variables ****/
+    float           consumed_data = __FLT_MAX__;
     uint16_t        store_index = 0;           /* Index to store data (oldest data or empty space on buffer) */ 
     uint16_t        consume_index = 0;         /* Index to consume data (oldest data) */
     bool            buffer_isCircular = false; /* TRUE if buffer is in circular mode (store index restarted to 0) */
+    bool            consume_isCircular = false;/* TRUE if consume_index has reached end of buffer and restarted from 0 */
     bool            buffer_isPopped = false;   /* Marks if items has been popped off the buffer */
     
 
@@ -64,6 +66,8 @@ class iotLogger{
     void incDataIndex();
     void incConsumeIndex();
     void checkConsumeIndex();
+    uint16_t searchValidIndex();
+    void resetBuffer();
     bool isValidData(uint16_t index);
     void empty();
 

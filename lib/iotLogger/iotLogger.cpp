@@ -55,16 +55,15 @@ void iotLogger::add(float data, unsigned long timestamp){
 bool iotLogger::getOldest(float &data_out,unsigned long &timestamp_out, bool peek){
 
     //Checks if data is avaiable, if not, returns false.
-    // if(!dataAvailable()){
-    //     Serial.print("Data not available");
-    //     setErrno(BUFFER_EMPTY,WARNING);
-    //     return false;
-    // }
-    // Serial.print("Al menos se ejecuta esta puta vergA?");
+    if(!dataAvailable()){
+        setErrno(BUFFER_EMPTY,WARNING);
+        return false;
+    }
     // Serial.print(D_BUFFER[consume_index]);
     // Serial.print(TS_BUFFER[consume_index]);
     data_out = D_BUFFER[consume_index];
     timestamp_out = TS_BUFFER[consume_index];
+    D_BUFFER[consume_index] = consumed_data;    //Stores consumed marker in consumed index.
 
     if(!peek){
         incConsumeIndex();
@@ -107,10 +106,15 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
     
     uint8_t printedlogs = 0;
     unsigned long prevMillis = iotMillis();
+    iotPRINT("\n####################### LOG DUMP #########################\n");
     iotPRINT("\n # consume_index = ");
     iotPRINTv(consume_index);
     iotPRINT("\n # store_index = ");
     iotPRINTv(store_index);
+    iotPRINT("\n # buffer_isCircular = ");
+    iotPRINTv(buffer_isCircular);
+    iotPRINT("\n # consume_isCircular = ");
+    iotPRINTv(consume_isCircular);
     iotPRINT("\n # INDEX #            # TIME-STAMP #             # DATA # ");
     for(uint16_t i = start ; i<= end; i++){
         //If chunk_size = 0, we print everything in one chunk.
@@ -131,11 +135,11 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
             printedlogs = 0;
         }
 
-        iotPRINT("\n   ");
+        iotPRINT("\n     ");
         iotPRINTv(i);
-        iotPRINT("                   ");
+        iotPRINT("                     ");
         iotPRINTv(TS_BUFFER[i]);
-        iotPRINT("                   ");
+        iotPRINT("                     ");
         iotPRINTv(D_BUFFER[i]);
         // Serial.print("\n#Data: ");
         // Serial.print(D_BUFFER[i]);
@@ -152,57 +156,94 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
  */
 bool iotLogger::dataAvailable(){
 
-    //FIX THIS SHIT. MUST TAKE IN COUNT CIRCULAR BUFFER! OR NOT.
-    if(consume_index == store_index){
-        return false;
+    /* Possible cases:
+    -- NOT CIRCULAR BUFFER --
+    store_index if empty. 
+    If consume_index = store_index => NO DATA. (###)
+    If consume_index < store_index => Data available
+       consume_index > store_index => Prohibited
+    
+    -- CIRCULAR BUFFER --
+     -NOT CIRCULAR CONSUME
+     consume_index = store_index => Data available (at the past of store_index)
+     consume_index > store_index => Data available (same previous)
+     consume_index < store_index => Prohibited (not circular consume)
+
+     -CIRCULAR CONSUME
+     consume_index = store_index => NO DATA. (###) Buffer should reset in incConsumeIndex();
+     consume_index < store_index => Data available 
+     consume_index > store_index => Prohibited (buffer should have resetted previously)
+
+     ---POPPED BUFFER --
+     -NOT circular buffer: must check just in the past of store_index
+     -Circular buffer: must check entire buffer for data.
+     
+    */
+
+    if(!buffer_isPopped){
+        if(!buffer_isCircular){
+            //Not circular and not popped buffer.
+            if(consume_index == store_index){
+                return false;
+            }else{
+                return true;
+            }
+        }else{
+            //Circular and not popped buffer.
+            if(buffer_isCircular && consume_isCircular
+                && (consume_index == store_index) ){
+                //resetBuffer();
+                return false;
+            }
+            return true;
+        }
+    }else{
     }
     return true;
 }
 //////////////////// PRIVATE ///////////////////////
 
 void iotLogger::incDataIndex(){
-    if( (store_index+1) >= BUFFER_SIZE ){
-        //This means we're in the last buffer position.
-        //If we increment in this position, it'll cause stackoverflow.
-        store_index = 0;            //We must restart the index to 0 (circular buffer)       
-        buffer_isCircular = true;   //Mark the buffer as circular.
-    }else{
 
-        //If the buffer IS NOT circular, then consumer_index < store_index
-        if(!buffer_isCircular){
-            store_index++;
-            return;
-        }
-        //If the buffer IS circular, then consumer_index could be > or < store_index (depending on relative speed)
-        //If the consume_index was on the same place that store_index (producer faster than consumer)
-        //then, consumer must follow store_index increments.
-        if( consume_index == store_index ){
-            //But what if we had some "popped out" item in the new store_index place? Then we must
-            //find the next valid item on the buffer...
-            uint16_t temp_store_index = store_index+1;
-            bool allAround = false;
-            unsigned long prevMillis = millis();
-            while((iotMillis() - prevMillis) < 5000){   //5 seconds timeout.
-                if(temp_store_index >= BUFFER_SIZE){
-                    if(allAround){
-                        //Entering here shouldn't be possible, but just in case...
-                        iotPRINT("\n !!Weird as S#!t error. !!");
-                        consume_index = store_index;
-                        break;
-                    }
-                    temp_store_index = 0;
-                    allAround = true;
-                }
-                if(isValidData(temp_store_index)){
-                    //Found valid buffer index to place consume_index
-                    consume_index = temp_store_index; //First round temp_store_index = store_index+1
-                    break;
-                }
-                temp_store_index++;
+    /* Possible cases:
+    -- NOT CIRCULAR BUFFER --
+    consume_index < store_index => store_index++
+    consume_index+1 == BUFFER_SIZE => consume_index = 0 ; buffer_isCircular TRUE
+
+    -- CIRCULAR BUFFER --
+    consume_index == store_index => consume_index = store_index
+    store_index > consume_index  => store_index++ (check buffer end)
+    store_index < consume_index  => store_index++ (check buffer end)
+    */
+
+   if(!buffer_isCircular){
+       //NOT Circular buffer
+       if( (store_index+1) >= BUFFER_SIZE ){
+           store_index = 0;
+           buffer_isCircular = true;
+           return;
+       }
+       //If not in the last position, just increment.
+       store_index++;
+       return;
+   }else{
+       //Circular buffer
+        if( (store_index+1) >= BUFFER_SIZE ){
+            //If both indexes where together, they must keep together.
+            if(store_index == consume_index){
+                consume_index = 0;
             }
-        }
-        store_index++;
-    }
+            store_index = 0;
+            return;
+       }
+       //If both indexes where together, they must keep together.
+       if(store_index == consume_index){
+           consume_index++;
+       }
+       store_index++;
+       return;
+   }
+   return;
 }
 
 void iotLogger::checkConsumeIndex(){
@@ -216,29 +257,130 @@ void iotLogger::checkConsumeIndex(){
  */
 void iotLogger::incConsumeIndex(){
 
-    //Tenemos que saber si queda informacion que consumir antes de incrementar...                                                
-    /* Situaciones a evaluar
-        -Buffer circular: nos encontramos al store_index
-        -Buffer circular: llegamos al final del buffer con consume_index
-        
-        -Buffer NO circular: el unico posible caso es encontrarnos al store_index. Todo a cero BUFFER_RESET.
-    */
-    if( (consume_index+1) >= BUFFER_SIZE ){
-        //If consume index reaches buffer end 
-        consume_index = 0; 
-    }else{
-        consume_index++;
-    }
+    /* Possible cases:
+    -- NOT CIRCULAR BUFFER --
+    consume_index == store_index => NO DATA (dataAvailable() => FALSE)
+    consume_index+1 < store_index => consume_index++
+    consume_index+1 = store_index => resetBuffer()
 
-    // We evaluate the case in which both indexes matches.
-    if(consume_index == store_index){
-        //Buffer has been totally consumed (no elements left to consume)
-        buffer_isCircular = false;
-        store_index = 0;
-        consume_index = 0;
-    }
+    -- CIRCULAR BUFFER --
+    --- consume_circular = FALSE
+    consume_index+1 = BUFFER_SIZE => consume_index = 0 ; consume_circular = TRUE
+    consume_index++;
+
+    --- consume_circular = TRUE
+    consume_index+1 < store_index => searchValidIndex();
+    consume_index+1 > store_index => consume_index++ ; Check BUFFER_SIZE
+    consume_index+1 == store_index => resetBuffer();
+    */
+
+   if(!buffer_isCircular){
+       //NOT Circular buffer
+       //Consume can't be circular!
+       if( (consume_index+1) == store_index){
+           resetBuffer();
+           return;
+       }
+       if( (consume_index+1) < store_index ){
+           consume_index++;
+           return;
+       }
+   }else{
+        // Serial.print("\n#incConsumeIndex => Circular buffer");
+       //Circular buffer
+       if(!consume_isCircular){
+           //NOT consume circular
+           if( (consume_index+1) == BUFFER_SIZE ){
+               consume_index = 0;
+                if(consume_index == store_index){
+                   resetBuffer();
+                   return;
+               }
+               consume_isCircular = true;
+               return;
+           }
+            consume_index++;
+            return;
+       }else{
+            // Serial.print("\n#incConsumeIndex => YES circular consume");
+           //Circular consume
+           if( (consume_index+1) == store_index ){
+               resetBuffer();
+               return;
+           }
+           if( (consume_index+1) == BUFFER_SIZE ){
+               consume_index = 0;
+               if(consume_index == store_index){
+                   resetBuffer();
+                   return;
+               }
+           }
+           if( (consume_index+1) < store_index ){
+               uint16_t temporalConsumeIndex = searchValidIndex();
+               if(temporalConsumeIndex == (BUFFER_SIZE+1) ){
+                   //No valid data found in the buffer.
+                    // Serial.print("\nsearchValidIndex(): ");
+                    // Serial.print(temporalConsumeIndex);
+                   resetBuffer();
+                   return;
+               }
+                // Serial.print("\n#incConsumeIndex => After searchValidIndex error check");
+               consume_index = temporalConsumeIndex;
+                // if(consume_index == store_index){
+                //    resetBuffer();
+                //    return;
+                // }
+               return;
+           }
+       }
+   }
+   return; //To avoid warning.
 }
 
+/**
+ * @brief Returns the next (oldest data) index with valid data. Starts searching from  
+ *        current consume_index.
+ * 
+ * @return uint16_t Index to valid data or (BUFFER_SIZE+1) if not valid data is found.
+ */
+uint16_t iotLogger::searchValidIndex(){
+    
+    //Searching from consume_index to the end of the array
+    // Serial.print("\n#searValidIndex => Start consume_index: ");
+    // Serial.print(consume_index);
+    for(uint16_t i = consume_index ; i < BUFFER_SIZE ; i++){
+        if(isValidData(i)){
+            // Serial.print("\n#searValidIndex => FOR 1 return consume_index: ");
+            // Serial.print(i);
+            return i;
+        }
+    }
+
+    //Searching from beggining of the array to consume_index
+    for(uint16_t i = 0 ; i < consume_index ; i++){
+        if(isValidData(i)){
+            // Serial.print("\n#searValidIndex => FOR 2 return consume_index: ");
+            // Serial.print(i);
+            return i;
+        }
+    }
+    return (BUFFER_SIZE+1);
+
+}
+
+void iotLogger::resetBuffer(void){
+    Serial.print("\n resetBuffer() => CALLED\n");
+    store_index = 0;
+    consume_index = 0;
+    consume_isCircular = false;
+    buffer_isCircular = false;
+    buffer_isPopped = false;
+
+    for(uint16_t i=0; i<BUFFER_SIZE; i++){
+        D_BUFFER[i] = 0;
+        TS_BUFFER[i] = 0;
+    }
+}
 
 /**
  * @brief Checks if data stored in index "index" is valid or not.
@@ -248,7 +390,7 @@ void iotLogger::incConsumeIndex(){
  */
 bool iotLogger::isValidData(uint16_t index){
     //Cambiar al D_BUFFER para poder no utilizar time-stamp
-    if(TS_BUFFER[index] != __DBL_MAX__){
+    if(D_BUFFER[index] != consumed_data){
         return true;
     }
     return false;
