@@ -32,14 +32,14 @@ void iotLogger::add(float data, unsigned long timestamp){
     D_BUFFER[store_index] = data;
     TS_BUFFER[store_index] = timestamp;
     
-    Serial.print("\nAdding #Data: ");
-    Serial.print(data);
-    Serial.print("    #Timestamp: ");
-    Serial.print(timestamp);
-    Serial.print("    #store_index: ");
-    Serial.print(store_index);
-    Serial.print("    #consume_index: ");
-    Serial.print(consume_index);
+    // Serial.print("\nAdding #Data: ");
+    // Serial.print(data);
+    // Serial.print("    #Timestamp: ");
+    // Serial.print(timestamp);
+    // Serial.print("    #store_index: ");
+    // Serial.print(store_index);
+    // Serial.print("    #consume_index: ");
+    // Serial.print(consume_index);
     incDataIndex();
 }
 
@@ -247,6 +247,7 @@ void iotLogger::incConsumeIndex(){
  * @return true  -> Data is valid.
  */
 bool iotLogger::isValidData(uint16_t index){
+    //Cambiar al D_BUFFER para poder no utilizar time-stamp
     if(TS_BUFFER[index] != __DBL_MAX__){
         return true;
     }

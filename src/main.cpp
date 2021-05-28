@@ -10,7 +10,9 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
 
-  //delay(1000);
+  //
+  
+  delay(1000);
 
   Logger.init();
 }
@@ -48,18 +50,20 @@ void loop() {
     Serial.print("   #Data: ");
     Serial.print(data);
   }
+  Logger.dumpBuffer();
 
-  // Serial.print("\n Consuming buffer (15)\n");
-  // for(i = 0; i<= 15; i++){
-  //   if(!Logger.getOldest(*data, *time_stamp)){
-  //     Serial.print("\n # NO DATA ");
-  //     continue;
-  //   }
-  //   Serial.print("\n # Time-stamp: ");
-  //   Serial.print(time_stamp);
-  //   Serial.print("   #Data: ");
-  //   Serial.print(data);
-  // }
+  Serial.print("\n Consuming buffer (15)\n");
+  for(i = 0; i<= 15; i++){
+    if(!Logger.getOldest(data, time_stamp)){
+      Serial.print("\n # NO DATA ");
+      continue;
+    }
+    Serial.print("\n # Time-stamp: ");
+    Serial.print(time_stamp);
+    Serial.print("   #Data: ");
+    Serial.print(data);
+  }
+  Logger.dumpBuffer();
 
   for(;;){
     asm("nop");

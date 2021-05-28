@@ -32,6 +32,8 @@ class   iotLogger;
 
 class iotLogger{
 
+    //Corregir variables que deben ser privadas.
+
     const char*     FILE_NAME;                /* File-name */
     float*          D_BUFFER;                 /* Data buffer */
     unsigned long*  TS_BUFFER;                /* Time-stamp buffer */
@@ -41,7 +43,7 @@ class iotLogger{
     uint16_t        store_index = 0;           /* Index to store data (oldest data or empty space on buffer) */ 
     uint16_t        consume_index = 0;         /* Index to consume data (oldest data) */
     bool            buffer_isCircular = false; /* TRUE if buffer is in circular mode (store index restarted to 0) */
-
+    bool            buffer_isPopped = false;   /* Marks if items has been popped off the buffer */
     
 
     public:
