@@ -4,7 +4,7 @@
 
 iotLogger Logger( 10,               /* Buffer size (number of elements) */
                   "test.log",       /* File to store buffer. Can include path (ie: logs/test.txt) */
-                  NO_TIMESTAMP);    /* */
+                  USER_TIMESTAMP);    /* */
 
 void setup() {
   // put your setup code here, to run once:
@@ -27,7 +27,7 @@ void loop() {
   Serial.print("\n Filling buffer (7) \n");
   for(i = 0; i<7 ; i++){
 
-    Logger.add(i,millis());
+    Logger.add(i+1,millis());
     delay(10);
   }
   Logger.dumpBuffer();
@@ -72,8 +72,34 @@ void loop() {
   }
   Logger.dumpBuffer();
 
-    Serial.print("\n Consuming buffer (10)\n");
-  for(i=0 ; i<10; i++){
+  // Serial.print("\n Consuming buffer (10)\n");
+  // for(i=0 ; i<10; i++){
+  //   if(!Logger.getOldest(data, time_stamp)){
+  //     Serial.print("\n # NO DATA ");
+  //     break;
+  //   }
+  //   Serial.print("\n # Time-stamp: ");
+  //   Serial.print(time_stamp);
+  //   Serial.print("   #Data: ");
+  //   Serial.print(data);
+  // }
+  // Logger.dumpBuffer();
+  // Logger.getOldest(data);
+
+  Serial.print("\n popWhereData TEST \n");
+  Logger.popWhereData(time_stamp,13,false);
+  Serial.print("\nData Popped (13)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.popWhereData(time_stamp,1,false);
+    Serial.print("\nData Popped (1)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.popWhereData(time_stamp,11,false);
+    Serial.print("\nData Popped (11)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.dumpBuffer();
+
+  Serial.print("\n Consuming buffer (2)\n");
+  for(i=0 ; i<2; i++){
     if(!Logger.getOldest(data, time_stamp)){
       Serial.print("\n # NO DATA ");
       break;
@@ -85,15 +111,48 @@ void loop() {
   }
   Logger.dumpBuffer();
 
-  Logger.getOldest(data);
+  Serial.print("\n popWhereTimestamp TEST \n");
+  
+  Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(2),false);
+  Serial.print("\nData Popped (i2)- data = ");
+  Serial.print(data);
 
-  // Serial.print("\n Filling buffer (7) \n");
-  // for(i = 0; i<7 ; i++){
+  Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(5),true);
+  Serial.print("\nData Popped (i5)- data = ");
+  Serial.print(data);
 
-  //   Logger.add(i,millis());
-  //   delay(10);
-  // }
-  // Logger.dumpBuffer();
+  Logger.dumpBuffer();
+
+  if(Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(5),false)){
+    Serial.print("\npopWhereTimestamp() => TRUE");
+    Serial.print("\nData Popped (i5)- data = ");
+    Serial.print(data); 
+  }else{
+    Serial.print("\npopWhereTimestamp() => FALSE");
+  }
+
+  if(Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(8),false)){
+    Serial.print("\npopWhereTimestamp() => TRUE");
+    Serial.print("\nData Popped (i8)- data = ");
+    Serial.print(data); 
+  }else{
+    Serial.print("\npopWhereTimestamp() => FALSE");
+  }
+  if(Logger.popWhereData(time_stamp,5,false)){
+    Serial.print("\npopWhereData() => TRUE");
+    Serial.print("\nData Popped (5)- timestamp = ");
+    Serial.print(time_stamp); 
+  }else{
+    Serial.print("\npopWhereData() => FALSE");
+  }
+
+  Serial.print("\n Filling buffer (7) \n");
+  for(i = 0; i<7 ; i++){
+
+    Logger.add(i,millis());
+    delay(10);
+  }
+  Logger.dumpBuffer();
 
   // Serial.print("\n Filling buffer (5) \n");
   // for(i = 0; i <5; i++){
@@ -102,31 +161,31 @@ void loop() {
   // }
   // Logger.dumpBuffer();
 
-  // Serial.print("\n Consuming buffer (3)\n");
-  // for(i=0 ; i<3; i++){
-  //   if(!Logger.getOldest(data, time_stamp)){
-  //     Serial.print("\n # NO DATA ");
-  //     continue;
-  //   }
-  //   Serial.print("\n # Time-stamp: ");
-  //   Serial.print(time_stamp);
-  //   Serial.print("   #Data: ");
-  //   Serial.print(data);
-  // }
-  // Logger.dumpBuffer();
+  Serial.print("\n Consuming buffer (3)\n");
+  for(i=0 ; i<3; i++){
+    if(!Logger.getOldest(data, time_stamp)){
+      Serial.print("\n # NO DATA ");
+      continue;
+    }
+    Serial.print("\n # Time-stamp: ");
+    Serial.print(time_stamp);
+    Serial.print("   #Data: ");
+    Serial.print(data);
+  }
+  Logger.dumpBuffer();
 
-  // Serial.print("\n Consuming buffer (2)\n");
-  // for(i = 0; i<= 15; i++){
-  //   if(!Logger.getOldest(data, time_stamp)){
-  //     Serial.print("\n # NO DATA ");
-  //     continue;
-  //   }
-  //   Serial.print("\n # Time-stamp: ");
-  //   Serial.print(time_stamp);
-  //   Serial.print("   #Data: ");
-  //   Serial.print(data);
-  // }
-  // Logger.dumpBuffer();
+  Serial.print("\n Consuming buffer (5)\n");
+  for(i = 0; i< 5; i++){
+    if(!Logger.getOldest(data, time_stamp)){
+      Serial.print("\n # NO DATA ");
+      continue;
+    }
+    Serial.print("\n # Time-stamp: ");
+    Serial.print(time_stamp);
+    Serial.print("   #Data: ");
+    Serial.print(data);
+  }
+  Logger.dumpBuffer();
 
   // Serial.print("\n Filling buffer (7) \n");
   // for(i = 0; i<7 ; i++){
