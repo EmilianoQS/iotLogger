@@ -22,11 +22,15 @@ enum iotLogger_errno {
     BUF_INIT_ERROR,     /* Error allocating buffer in memory (HEAP).        */
     STORAGE_INIT_ERROR, /* Error starting SPIFFS file-system.               */
     UNEXPECTED_ERROR,   /* Found buffer data corruption.                    */
+    FILE_OPEN_ERROR,    /* Error when opening SPIFFS file                   */
+    FILE_DPRINT_ERROR,  /* Error when printing DATA to SPIFFS file          */
+    FILE_TSPRINT_ERROR, /* Error when printing TIMESTAMP to SPIFFS file     */
     CRITICAL,           /*       ## CRITICAL ERROR SEPARATOR ##             */
     BUFFER_EMPTY,       /* Buffer is empty.                                 */
     INDEX_OUT_OF_RANGE, /* Entered index is out of range.                   */
     SERIAL_TIMEDOUT,    /* Serial port timedout.                            */ 
     NO_TS_UNAVAILABLE,  /* Not available in NO_TIMESTAMP mode.              */
+    NOT_FRAGMENTED,    /* Buffer not fragmented. Defrag not needed.        */ 
     WARNING,            /*       ## WARNING ERROR SEPARATOR  ##             */
     NOT_FOUND,          /* Value not found in buffer.                       */
     VERBOSE,            /*       ## VERBOSE ERROR SEPARATOR  ##             */
@@ -66,37 +70,42 @@ class iotLogger{
     void add(float data = 0, unsigned long timestamp = 0);
     bool getOldest(float &data_out, unsigned long &timestamp_out, bool peek = false);
     bool getOldest(float &data_out, bool peek = false);     //NO_TIMESTAMP overload
-
     bool popWhereData (unsigned long &timestamp_out, float data_in, bool peek = true);
-    //bool popWhereData(float &data_out, float data_in);      //NO_TIMESTAMP overload
     bool popWhereTimestamp(float &data_out, unsigned long timestamp_in, bool peek = true);
     unsigned long getTimestampByIndex(uint16_t index);
     float getDataByIndex(uint16_t index);
-
-
     bool dumpBuffer(uint8_t chunk_size = 0, uint16_t start = 0, uint16_t end = 0);
     bool dataAvailable();
     void printErrno(iotLogger_errno errno);
     iotLogger_errno errno;
+    bool defragment();
 
-    private:
-
-    void defragmentBuffer();
+    private:    
     void incStoreIndex();
     void incConsumeIndex();
     void consumeData(uint16_t index);
     uint16_t searchValidIndex();
-    void resetBuffer();
+    void resetBuffer(bool just_indexes = false);
     bool isValidData(uint16_t index);
     void empty();
-
-
     void setErrno(iotLogger_errno errno,uint8_t error_level = VERBOSE);
 
+
+    /**
+     * SPIFFS File System related functions
+     */
+
+    private: 
+    bool fileToMemory();
+    bool memoryToFile();
+    bool fileStats();
+    bool fileExists();
+    bool fileDelete();
+
 };
 
-class iotLoggertoSPIFFS : public iotLogger{
+// class iotLoggertoSPIFFS : public iotLogger{
 
-   public:
-   void empty(); 
-};
+//    public:
+//    void empty(); 
+// };
