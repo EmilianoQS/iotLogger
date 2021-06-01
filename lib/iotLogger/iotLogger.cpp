@@ -1,34 +1,48 @@
 #include "iotLogger.h"
 
 
-iotLogger::iotLogger(uint16_t BUFFER_SIZE,const char* FILE_NAME, ts_mode TS_MODE){
+iotLogger::iotLogger(uint16_t BUFFER_SIZE, ts_mode TS_MODE){
 
     this->BUFFER_SIZE = BUFFER_SIZE;
-    this->FILE_NAME = FILE_NAME;
     this->TS_MODE = TS_MODE; 
 }
 
+/**
+ * @brief Destroy the iot Logger::iot Logger object
+ * 
+ */
+iotLogger::~iotLogger(){
+    free(D_BUFFER);
+    if(TS_MODE != NO_TIMESTAMP) 
+        free(TS_BUFFER);
+}
+
+/**
+ * @brief Initializes class. Creates buffers in memory.
+ * 
+ * @return TRUE if initialization OK.  
+ */
 bool iotLogger::init(){
 
     // D_BUFFER = (float*)malloc(BUFFER_SIZE * sizeof(float));
     D_BUFFER = (float*)calloc(BUFFER_SIZE,sizeof(D_BUFFER));           //Allocates and initialize DATA buffer
-
-    if(TS_MODE != NO_TIMESTAMP)
-        TS_BUFFER = (unsigned long*)calloc(BUFFER_SIZE,sizeof(TS_BUFFER));  //Allocates and initialize TIMESTAMP buffer
-
-	if (D_BUFFER == NULL)
-	{
+    if (D_BUFFER == NULL){
         setErrno(BUF_INIT_ERROR,CRITICAL);
         return false;
 	}
 
-    return true;
-}
+    if(TS_MODE != NO_TIMESTAMP){
+        TS_BUFFER = (unsigned long*)calloc(BUFFER_SIZE,sizeof(TS_BUFFER));  //Allocates and initialize TIMESTAMP buffer
+        if (TS_BUFFER == NULL){
 
-void iotLogger::end(){
-    free(D_BUFFER);
-    if(TS_MODE != NO_TIMESTAMP)
-        free(TS_BUFFER);
+            setErrno(INIT_ERROR_MEMORY, CRITICAL);
+            free(D_BUFFER);
+            return false;
+	    }
+    }
+
+
+    return true;
 }
 
 void iotLogger::add(float data, unsigned long timestamp){
@@ -663,7 +677,7 @@ void iotLogger::consumeData(uint16_t index){
  */
 bool iotLogger::isValidData(uint16_t index){
     //Cambiar al D_BUFFER para poder no utilizar time-stamp
-    if(D_BUFFER[index] != consumed_data){
+    if(D_BUFFER[index] != consumed_data && TS_BUFFER[index] != consumed_timestamp){
         return true;
     }
     return false;
@@ -672,13 +686,19 @@ bool iotLogger::isValidData(uint16_t index){
 
 
 void iotLogger::setErrno(iotLogger_errno errno, uint8_t error_level){
-    errno = errno;
+    this->errno = errno;
+    printErrno(errno);
+    return;
 }
 
 void iotLogger::printErrno(iotLogger_errno errno){
+
     if(DEBUG_LEVEL == NO_DEBUG){
         return;
     }
+
+    // Serial.print("\nError code:");
+    // Serial.print(errno);
     bool must_print = false;
     if(errno < DEBUG_LEVEL){
         must_print = true;
@@ -688,45 +708,83 @@ void iotLogger::printErrno(iotLogger_errno errno){
     {
     case BUF_INIT_ERROR:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");
+            iotPRINT("\n#iotLogger ERROR: Can't intialize buffer. Enought memory?\n");
+    break;
+
+    case INIT_ERROR_MEMORY:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Not enought memory to initializa TimeStamp Buffer.\n");
     break;
 
     case STORAGE_INIT_ERROR:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");    
+            iotPRINT("\n#iotLogger ERROR: Can't initialize file system.\n");    
     break;
     
     case UNEXPECTED_ERROR:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");
+            iotPRINT("\n#iotLogger ERROR: Unexpected error.\n");
+    break;
+
+    case SPIFFS_INIT_ERROR:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Error initializing SPIFFS.\n");
+    break;
+
+    case FILE_DPRINT_ERROR:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Error when storing data to data file.\n");
+    break;
+
+    case FILE_TSPRINT_ERROR:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Error when storing data to time-stamp file.\n");
+    break;
+
+    case DEFRAG_ERROR:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Error when trying to defragment buffer.\n");
     break;
 
     case BUFFER_EMPTY:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");
+            iotPRINT("\n#iotLogger ERROR: The buffer is empty.\n");
     break;
 
     case INDEX_OUT_OF_RANGE:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");
+            iotPRINT("\n#iotLogger ERROR: Entered index is out of range.\n");
     break;
 
     case SERIAL_TIMEDOUT:
         if(must_print)
-            iotPRINT("\n#iotLogger ERROR: \n");
+            iotPRINT("\n#iotLogger ERROR: Serial port timedout.\n");
     break;
 
     case NO_TS_UNAVAILABLE:
-            iotPRINT("\n#iotLogger ERROR: \n");
+        if(must_print)
+            iotPRINT("\n#iotLogger WARNING: Not available in NO_TIMESTAMP mode.\n");
+    break;
 
+    case NOT_FRAGMENTED:
+        if(must_print)
+            iotPRINT("\n#iotLogger VERBOSE: Buffer not fragmented.\n");
     break;
 
     case NOT_FOUND:
-            iotPRINT("\n#iotLogger ERROR: \n");
+        if(must_print)
+            iotPRINT("\n#iotLogger VERBOSE: Requested data not found.\n");
+
+    break;
+
+    case DEFRAG_OK:
+        if(must_print)
+            iotPRINT("\n#iotLogger VERBOSE: Defragmentation completed.\n");
 
     break;
 
     default:
+        if(DEBUG_LEVEL == VERBOSE)
             iotPRINT("\n#iotLogger ERROR: Unknown error code.\n");
     break;
     }
@@ -742,6 +800,8 @@ return;
  *  sizeof(float)*BUFFER_SIZE + sizeof(unsigned long)*BUFFER_SIZE
  * 
  */
+
+
 bool iotLogger::defragment(){
 
     //First we'll check if there's data in the buffer.
@@ -751,15 +811,19 @@ bool iotLogger::defragment(){
         return true;    //Or should be FALSE? ..... TODO
     }
 
-    if(!buffer_isPopped){
+    if(!buffer_isPopped && !buffer_isCircular){ 
         //If the buffer is not popped, then we don't need to defragment!
+        //If the buffer is just circular (no popped) we don't need either, but
+        //we'll do it anyways to avoid complications storing to file.
         setErrno(NOT_FRAGMENTED, WARNING);
         return true;    //Or should be FALSE? ..... TODO
     }
 
+    // getMemoryStatistics();
+
     //Here we don't need to initialize elements to cero, so we use malloc.
     float* temp_D_BUFFER = (float*)calloc(BUFFER_SIZE,sizeof(D_BUFFER));   //Allocates and initialize DATA buffer
-    unsigned long* temp_TS_BUFFER;
+    unsigned long* temp_TS_BUFFER = nullptr;
 
     if(TS_MODE != NO_TIMESTAMP){
         temp_TS_BUFFER = (unsigned long*)calloc(BUFFER_SIZE,sizeof(TS_BUFFER));  //Allocates and initialize TIMESTAMP buffer
@@ -770,6 +834,8 @@ bool iotLogger::defragment(){
 	    }
     }
 
+    // getMemoryStatistics();
+
 	if (temp_D_BUFFER == NULL){
         setErrno(BUF_INIT_ERROR, CRITICAL);
         return false;
@@ -777,27 +843,18 @@ bool iotLogger::defragment(){
 
     //We'll copy every log to the temporal buffers in order, and then re-generate the indexes.
     bool parseEnd = false;     // Flag to mark when we finished parsing the entire buffer.
-    bool circularOnce = false;  // Flag to mark when we have reached the end of the buffer once.
     uint16_t index = 0;
     uint16_t temp_consume_index;
-    uint16_t prev_consume_index = 0;
  
-    if(!circularOnce){
-        //In the first loop, temp_consume_index(=consume_index) is always valid data. 
-        for(temp_consume_index = consume_index ; temp_consume_index < BUFFER_SIZE ; temp_consume_index++){
-            if(isValidData(temp_consume_index)){
-                temp_D_BUFFER[index] = D_BUFFER[temp_consume_index];
-                if(TS_MODE != NO_TIMESTAMP)
-                    temp_TS_BUFFER[index] = TS_BUFFER[temp_consume_index];
+    //In the first loop, temp_consume_index(=consume_index) is always valid data. 
+    for(temp_consume_index = consume_index ; temp_consume_index < BUFFER_SIZE ; temp_consume_index++){
+        if(isValidData(temp_consume_index)){
+            temp_D_BUFFER[index] = D_BUFFER[temp_consume_index];
+            if(TS_MODE != NO_TIMESTAMP)
+                temp_TS_BUFFER[index] = TS_BUFFER[temp_consume_index];
 
-                index++;    //index will always be +1 ahead of temp_consume_index
-                continue;
-            }
-
-            //Must check if this is the last loop. 
-            if( temp_consume_index == (BUFFER_SIZE-1) ){
-                circularOnce = true;
-            }
+            index++;    //index will always be +1 ahead of temp_consume_index
+            continue;
         }
     }
 
@@ -833,8 +890,16 @@ bool iotLogger::defragment(){
 
     resetBuffer(true);  //Just resetting indexes.
 
+    // getMemoryStatistics();
+
     consume_index = 0;
-    store_index = index;
+
+    if(index >= BUFFER_SIZE){
+        //Possible case when buffer is circular, not popped, and full.
+        store_index = 0;
+    }else{
+        store_index = index;
+    }
     memcpy(D_BUFFER, temp_D_BUFFER, sizeof(D_BUFFER)*BUFFER_SIZE);
     if(TS_MODE != NO_TIMESTAMP)
         memcpy(TS_BUFFER, temp_TS_BUFFER, sizeof(TS_BUFFER)*BUFFER_SIZE);
@@ -844,14 +909,69 @@ bool iotLogger::defragment(){
     if(TS_MODE != NO_TIMESTAMP)
         free(temp_TS_BUFFER);
 
+    // getMemoryStatistics();
+    setErrno(DEFRAG_OK, VERBOSE);
+    return true;
 }
 
-void iotLogger::empty(){
-    asm("nop");
+void iotLogger::getMemoryStatistics(){
+
+    iotPRINT("\n\n # ESP32 Memory Statistics #");
+    iotPRINT("\n # Free Internal heap size: ");     //Internal => Doesn't take in count external DRAM
+    iotPRINTv(esp_get_free_internal_heap_size());
+    iotPRINT("\n # Free heap size (all): ");        //Every available HEAP in the chip.
+    iotPRINTv(esp_get_free_heap_size());
+    iotPRINT("\n # Free Minimum heap size: ");      //Minimum allocable block (with ONE malloc)
+    iotPRINTv(esp_get_minimum_free_heap_size());
+    return;
 }
 
-bool iotLogger::fileToMemory(){
 
+/**************************************************************************
+ * 
+ *  iotLoggerFile class extension.
+ * 
+ *  This class extends the capabilities of the iotLogger class, to add the 
+ *  feature of File Persistence.
+ *  To implement File Persistence, this class uses SPIFFS File System. If 
+ *  you want to use a different file system, then you have to do your own
+ *  implementation of the following functions.
+ * 
+ **************************************************************************/
+
+bool iotLoggerFile::init(){
+    //Initializes iotLogger class.
+    if( !iotLogger::init() )
+        return false;
+
+    if(!SPIFFS.begin(true)){    //Si no dejamos el "format on fail" como TRUE, entonces el 1er clean run de codigo en una ESP falla (Failed to mount).
+        setErrno(SPIFFS_INIT_ERROR, CRITICAL);
+        return false;
+    }
+
+    if(fileExists()){
+        //TODO: Load the file to memory.
+        Serial.print("\n INIT -> File Exists! TODO: Load file to memory");
+    }
+    return true;
+}
+
+/**
+ * @brief Destroy the iot Logger File::iot Logger File object
+ *
+ */
+iotLoggerFile::~iotLoggerFile(){
+}
+
+void iotLoggerFile::setStoreInterval(unsigned long store_interval){
+    this->store_interval = store_interval;
+    return;
+}
+
+long iotLoggerFile::storeFileTimed(){
+    //TODO: TIMING THINGS...
+    //return long? con tiempo que le tomo guardar el archivo? quizas.
+    memoryToFile();
 }
 
 /**
@@ -861,7 +981,7 @@ bool iotLogger::fileToMemory(){
  * @return true 
  * @return false 
  */
-bool iotLogger::memoryToFile(){
+bool iotLoggerFile::memoryToFile(){
 
     File iotFile;
     iotFile = SPIFFS.open(FILE_NAME, FILE_WRITE);
@@ -870,7 +990,10 @@ bool iotLogger::memoryToFile(){
         return false;
     }
 
-    //Buffer defragment HERE!!!
+    if(!defragment()){
+        setErrno(DEFRAG_ERROR, WARNING);
+        return false;
+    }
 
     // Configuration variables storing.
     iotFile.println(store_index);
@@ -879,42 +1002,41 @@ bool iotLogger::memoryToFile(){
     iotFile.println(consume_isCircular);
     iotFile.println(buffer_isPopped);
 
-    if(buffer_isCircular){
-        //If it is not circular, we just must go to store_index
-        for(uint16_t i = 0 ; i < store_index ; i++){
-            //No need to check for valid data.
-            if( iotFile.println(D_BUFFER[i]) == 0){
-                setErrno(FILE_DPRINT_ERROR, CRITICAL);
-                iotFile.close();
-                return false;
-            }
-            if( iotFile.println(TS_BUFFER[i]) == 0){
-                setErrno(FILE_TSPRINT_ERROR, CRITICAL);
-                iotFile.close();
-                return false;
-            }
-        }
+    //Because the buffer has been defragmented, we'll have the consume_index = 0
+    //and the store_index in the last position unless store_index = 0.
 
+    uint16_t end = 0;
+    uint16_t i = 0;
+    bool error = false;
+
+    if(store_index == 0){
+        end = 0;
     }else{
-        //If the buffer is circular, we must run over every element
-        for(uint16_t i = 0; i < BUFFER_SIZE ; i++ ){
-            if(!isValidData(i)){
-                continue;
-            }
+        end = store_index; //Last valid data in (store_index-1)
+    }
 
-            if( iotFile.println(D_BUFFER[i]) == 0){
+    for(i = 0; i < end; i++){
+        if(iotFile.println(D_BUFFER[i]) == 0){
+            setErrno(FILE_DPRINT_ERROR, CRITICAL);
+            error = true;
+            break;
+        }
+        if(TS_MODE != NO_TIMESTAMP){
+            if(iotFile.println(TS_BUFFER[i]) == 0){
                 setErrno(FILE_DPRINT_ERROR, CRITICAL);
-                iotFile.close();
-                return false;
-            }
-            if( iotFile.println(TS_BUFFER[i]) == 0){
-                setErrno(FILE_TSPRINT_ERROR, CRITICAL);
-                iotFile.close();
-                return false;
-            }           
+                error = true;
+                break;
+            } 
         }
     }
 
+    if(error){
+        iotFile.close();
+        if(i>1)     //File stored partially. NOT GOOD.            
+            fileDelete();
+
+        return false;
+    }
     Serial.print("\n File: ");
     Serial.print(FILE_NAME);
     Serial.print("\n Size: ");
@@ -924,15 +1046,60 @@ bool iotLogger::memoryToFile(){
     return true;
 }
 
-bool iotLogger::fileStats(){
-    // spiffs_stat s;
-    // res = SPIFFS_stat(&fs, FILE_NAME, &s);
+/**
+ * @brief Retrieves file from memory and loads it to RAM memory.
+ * 
+ * @return true 
+ * @return false 
+ */
+bool iotLoggerFile::fileToMemory(){
+
+    // STORE ORDER
+    // iotFile.println(store_index);        //uint16_t
+    // iotFile.println(consume_index);      //uint16_t
+    // iotFile.println(buffer_isCircular);  //bool (int)
+    // iotFile.println(consume_isCircular); //bool (int)
+    // iotFile.println(buffer_isPopped);    //bool (int)
+
+    File iotFile;
+    iotFile = SPIFFS.open(FILE_NAME, FILE_READ);
+    if(iotFile < 0){
+        setErrno(FILE_OPEN_ERROR, CRITICAL);
+        return false;
+    }
+
+    if(!fileExists()){
+        setErrno(FILE_NOT_EXISTS, VERBOSE);
+        return true;
+    }
+
+    //First 5 lines of the file, are the configuration variables.
+    for(uint8_t i = 0; i<5 ; i++){
+
+    }
+ 
+    return true;
 }
 
-bool iotLogger::fileExists(){   
+bool iotLoggerFile::fileStats(){
+    // spiffs_stat s;
+    // res = SPIFFS_stat(&fs, FILE_NAME, &s);
+    return true;
+}
+/**
+ * @brief Checks if file exists.
+ * 
+ * @return TRUE -> File exists || FALSE -> File doesn't exists.
+ */
+bool iotLoggerFile::fileExists(){   
     return SPIFFS.exists(FILE_NAME);
 }
 
-bool iotLogger::fileDelete(){
+/**
+ * @brief Deletes file
+ * 
+ * @return TRUE -> Deletion OK || FALSE -> Deleteon FAIL (file exists?) 
+ */
+bool iotLoggerFile::fileDelete(){
     return SPIFFS.remove(FILE_NAME);
 }

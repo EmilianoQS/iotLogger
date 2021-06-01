@@ -2,8 +2,8 @@
 
 #include "../lib/iotLogger/iotLogger.h"
 
-iotLogger Logger( 10,               /* Buffer size (number of elements) */
-                  "test.log",       /* File to store buffer. Can include path (ie: logs/test.txt) */
+iotLoggerFile Logger( 10,                 /* Buffer size (number of elements) */
+                  "/logs/test.log",        /* File to store buffer. Can include path (ie: logs/test.txt) */
                   USER_TIMESTAMP);    /* */
 
 void setup() {
@@ -23,7 +23,17 @@ void loop() {
   uint8_t i = 0;
 
 
+/**
+ * @brief Arreglar bug que posiciona mal el store_index luego de defragmentar
+ * 
+ * -- Permitir la defragmentacion de bufferes CIRCULARES por mas que no esten 
+ *  popeados.
+ * 
+ */
 
+
+//DEFRAGMENT TEST
+  Serial.print("\n\n DEFRAGMENT TEST with NOT CIRCULAR BUFFER");
   Serial.print("\n Filling buffer (7) \n");
   for(i = 0; i<7 ; i++){
 
@@ -31,6 +41,55 @@ void loop() {
     delay(10);
   }
   Logger.dumpBuffer();
+
+  if( Logger.defragment()){
+    Serial.print("\n defragment() => TRUE");
+  }else{
+    Serial.print("\n defragment() => FALSE");
+  }
+  
+
+  Serial.print("\n popWhereData TEST \n");
+  Logger.popWhereData(time_stamp,2,false);
+  Serial.print("\nData Popped (2)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.popWhereData(time_stamp,5,false);
+  Serial.print("\nData Popped (5)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.popWhereData(time_stamp,6,false);
+  Serial.print("\nData Popped (6)- timestamp = ");
+  Serial.print(time_stamp);
+  Logger.dumpBuffer();
+
+  if( Logger.defragment()){
+    Serial.print("\n defragment() => TRUE");
+  }else{
+    Serial.print("\n defragment() => FALSE");
+  }
+  
+  Logger.dumpBuffer();
+
+  Serial.print("\n\n DEFRAGMENT TEST with CIRCULAR BUFFER");
+
+  Serial.print("\n Filling buffer (15) \n");
+  for(i = 0; i <15; i++){
+    Logger.add(i,millis());
+    delay(15);
+  }
+  Logger.dumpBuffer();
+
+  if( Logger.defragment()){
+    Serial.print("\n defragment() => TRUE");
+  }else{
+    Serial.print("\n defragment() => FALSE");
+  }
+  
+  Logger.dumpBuffer();
+
+  // Logger.add(999,millis());
+
+  // Logger.dumpBuffer();
+
 
   Serial.print("\n Consuming buffer (7)\n");
   for(i=0 ; i<7; i++){
@@ -45,32 +104,45 @@ void loop() {
   }
   Logger.dumpBuffer();
 
-  Serial.print("\n Filling buffer (15) \n");
-  for(i = 0; i <15; i++){
-    Logger.add(i,millis());
-    delay(15);
+  if( Logger.defragment()){
+    Serial.print("\n defragment() => TRUE");
+  }else{
+    Serial.print("\n defragment() => FALSE");
   }
-  Logger.dumpBuffer();
   
-  Serial.print("\n Consuming buffer (4)\n");
-  for(i=0 ; i<4; i++){
-    if(!Logger.getOldest(data, time_stamp)){
-      Serial.print("\n # NO DATA ");
-      continue;
-    }
-    Serial.print("\n # Time-stamp: ");
-    Serial.print(time_stamp);
-    Serial.print("   #Data: ");
-    Serial.print(data);
+  Logger.dumpBuffer();
+
+  if(Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(7),false)){
+    Serial.print("\npopWhereTimestamp() => TRUE");
+    Serial.print("\nData Popped (i7)- data = ");
+    Serial.print(data); 
+  }else{
+    Serial.print("\npopWhereTimestamp() => FALSE");
+  }
+
+  if(Logger.popWhereTimestamp(data,Logger.getTimestampByIndex(8),false)){
+    Serial.print("\npopWhereTimestamp() => TRUE");
+    Serial.print("\nData Popped (i8)- data = ");
+    Serial.print(data); 
+  }else{
+    Serial.print("\npopWhereTimestamp() => FALSE");
   }
   Logger.dumpBuffer();
 
-  Serial.print("\n Filling buffer (3) \n");
-  for(i = 0; i <3; i++){
-    Logger.add(i,millis());
-    delay(15);
+  if( Logger.defragment()){
+    Serial.print("\n defragment() => TRUE");
+  }else{
+    Serial.print("\n defragment() => FALSE");
   }
+  
   Logger.dumpBuffer();
+
+
+  for(;;){
+    asm("nop");
+  }
+
+  //##################################################################################
 
   // Serial.print("\n Consuming buffer (10)\n");
   // for(i=0 ; i<10; i++){
@@ -154,38 +226,7 @@ void loop() {
   }
   Logger.dumpBuffer();
 
-  // Serial.print("\n Filling buffer (5) \n");
-  // for(i = 0; i <5; i++){
-  //   Logger.add(i,millis());
-  //   delay(15);
-  // }
-  // Logger.dumpBuffer();
 
-  Serial.print("\n Consuming buffer (3)\n");
-  for(i=0 ; i<3; i++){
-    if(!Logger.getOldest(data, time_stamp)){
-      Serial.print("\n # NO DATA ");
-      continue;
-    }
-    Serial.print("\n # Time-stamp: ");
-    Serial.print(time_stamp);
-    Serial.print("   #Data: ");
-    Serial.print(data);
-  }
-  Logger.dumpBuffer();
-
-  Serial.print("\n Consuming buffer (5)\n");
-  for(i = 0; i< 5; i++){
-    if(!Logger.getOldest(data, time_stamp)){
-      Serial.print("\n # NO DATA ");
-      continue;
-    }
-    Serial.print("\n # Time-stamp: ");
-    Serial.print(time_stamp);
-    Serial.print("   #Data: ");
-    Serial.print(data);
-  }
-  Logger.dumpBuffer();
 
   // Serial.print("\n Filling buffer (7) \n");
   // for(i = 0; i<7 ; i++){
