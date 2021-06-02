@@ -274,16 +274,18 @@ bool iotLogger::dumpBuffer(uint8_t chunk_size, uint16_t start, uint16_t end){
     uint8_t printedlogs = 0;
     unsigned long prevMillis = iotMillis();
     iotPRINT("\n####################### LOG DUMP #########################\n");
-    iotPRINT("\n # consume_index = ");
-    iotPRINTv(consume_index);
-    iotPRINT("\n # store_index = ");
-    iotPRINTv(store_index);
-    iotPRINT("\n # buffer_isCircular = ");
-    iotPRINTv(buffer_isCircular);
-    iotPRINT("\n # buffer_isPopped = ");
-    iotPRINTv(buffer_isPopped);
-    iotPRINT("\n # consume_isCircular = ");
-    iotPRINTv(consume_isCircular);
+    if(DEBUG_LEVEL == VERBOSE){
+        iotPRINT("\n # consume_index = ");
+        iotPRINTv(consume_index);
+        iotPRINT("\n # store_index = ");
+        iotPRINTv(store_index);
+        iotPRINT("\n # buffer_isCircular = ");
+        iotPRINTv(buffer_isCircular);
+        iotPRINT("\n # buffer_isPopped = ");
+        iotPRINTv(buffer_isPopped);
+        iotPRINT("\n # consume_isCircular = ");
+        iotPRINTv(consume_isCircular);
+    }
     if(TS_MODE == NO_TIMESTAMP){
         iotPRINT("\n # INDEX #            # ########## #             # DATA # ");
     }else{
@@ -731,6 +733,11 @@ void iotLogger::printErrno(iotLogger_errno errno){
             iotPRINT("\n#iotLogger ERROR: Error initializing SPIFFS.\n");
     break;
 
+    case FILE_OPEN_ERROR:
+        if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Error opening the file.\n");    
+    break;
+
     case FILE_DPRINT_ERROR:
         if(must_print)
             iotPRINT("\n#iotLogger ERROR: Error when storing data to data file.\n");
@@ -739,6 +746,11 @@ void iotLogger::printErrno(iotLogger_errno errno){
     case FILE_TSPRINT_ERROR:
         if(must_print)
             iotPRINT("\n#iotLogger ERROR: Error when storing data to time-stamp file.\n");
+    break;
+
+    case CONVERSION_ERROR:
+    if(must_print)
+            iotPRINT("\n#iotLogger ERROR: Conversion from char array FAILED.\n");
     break;
 
     case DEFRAG_ERROR:
@@ -781,6 +793,16 @@ void iotLogger::printErrno(iotLogger_errno errno){
         if(must_print)
             iotPRINT("\n#iotLogger VERBOSE: Defragmentation completed.\n");
 
+    break;
+
+    case FILE_NOT_EXISTS:
+        if(must_print)
+        iotPRINT("\n#iotLogger VERBOSE: File doesn't exists.\n");
+    break;
+
+    case FILE_LOAD_OK:
+        if(must_print)
+        iotPRINT("\n#iotLogger VERBOSE: File loaded OK.\n");
     break;
 
     default:
@@ -897,6 +919,8 @@ bool iotLogger::defragment(){
     if(index >= BUFFER_SIZE){
         //Possible case when buffer is circular, not popped, and full.
         store_index = 0;
+        //The new buffer has to start as circular so the consumed_index follows store_index.
+        buffer_isCircular = true;
     }else{
         store_index = index;
     }
@@ -914,7 +938,7 @@ bool iotLogger::defragment(){
     return true;
 }
 
-void iotLogger::getMemoryStatistics(){
+void iotLogger::getMemoryStats(){
 
     iotPRINT("\n\n # ESP32 Memory Statistics #");
     iotPRINT("\n # Free Internal heap size: ");     //Internal => Doesn't take in count external DRAM
@@ -940,7 +964,7 @@ void iotLogger::getMemoryStatistics(){
  **************************************************************************/
 
 bool iotLoggerFile::init(){
-    //Initializes iotLogger class.
+    //Initializes iotLogger class (base class).
     if( !iotLogger::init() )
         return false;
 
@@ -950,9 +974,17 @@ bool iotLoggerFile::init(){
     }
 
     if(fileExists()){
-        //TODO: Load the file to memory.
-        Serial.print("\n INIT -> File Exists! TODO: Load file to memory");
+        if(fileToMemory()){
+            if(DEBUG_LEVEL == VERBOSE)
+                iotPRINT("\niotLogger => Buffer initialized from file.");
+        
+        return true;
+        }
     }
+
+    if(DEBUG_LEVEL == VERBOSE)
+        iotPRINT("\niotLogger => No file found. Buffer intialized empty.");
+
     return true;
 }
 
@@ -967,11 +999,30 @@ void iotLoggerFile::setStoreInterval(unsigned long store_interval){
     this->store_interval = store_interval;
     return;
 }
-
+/**
+ * @brief This function must run in a endless loop. If there's an error storing logs to
+ * file, then it returns -1. If it's not the time to store the file, returns 0.
+ * If the file has been stored successfully returns the time it took it to store the file
+ * (>1)
+ * 
+ * @return long = 0 => Not time to store || =-1 => Error storing || >1 Store OK (time elapsed)
+ */
 long iotLoggerFile::storeFileTimed(){
-    //TODO: TIMING THINGS...
-    //return long? con tiempo que le tomo guardar el archivo? quizas.
-    memoryToFile();
+  
+    if((iotMillis() - prev_millis) >= store_interval){
+        long time_elapsed = iotMillis();
+        long total_time = -1;
+
+        if(memoryToFile()){
+            total_time = iotMillis() - time_elapsed;
+            return total_time == 0 ? 1 : total_time;
+
+        }else{
+            return -1;
+        }
+    }
+    
+    return 0;
 }
 
 /**
@@ -997,20 +1048,20 @@ bool iotLoggerFile::memoryToFile(){
 
     // Configuration variables storing.
     iotFile.println(store_index);
-    iotFile.println(consume_index);
     iotFile.println(buffer_isCircular);
-    iotFile.println(consume_isCircular);
-    iotFile.println(buffer_isPopped);
 
     //Because the buffer has been defragmented, we'll have the consume_index = 0
     //and the store_index in the last position unless store_index = 0.
 
     uint16_t end = 0;
     uint16_t i = 0;
+    uint32_t total_size = sizeof(buffer_isCircular) + sizeof(store_index);
+    uint8_t data_size = sizeof(D_BUFFER);
+    uint8_t timestamp_size = sizeof(TS_BUFFER);
     bool error = false;
 
     if(store_index == 0){
-        end = 0;
+        end = BUFFER_SIZE;
     }else{
         end = store_index; //Last valid data in (store_index-1)
     }
@@ -1021,6 +1072,7 @@ bool iotLoggerFile::memoryToFile(){
             error = true;
             break;
         }
+        total_size += data_size;
         if(TS_MODE != NO_TIMESTAMP){
             if(iotFile.println(TS_BUFFER[i]) == 0){
                 setErrno(FILE_DPRINT_ERROR, CRITICAL);
@@ -1028,6 +1080,7 @@ bool iotLoggerFile::memoryToFile(){
                 break;
             } 
         }
+        total_size += timestamp_size;
     }
 
     if(error){
@@ -1037,12 +1090,16 @@ bool iotLoggerFile::memoryToFile(){
 
         return false;
     }
-    Serial.print("\n File: ");
-    Serial.print(FILE_NAME);
-    Serial.print("\n Size: ");
-    Serial.print(iotFile.size());
 
     iotFile.close();
+    
+    if(DEBUG_LEVEL == VERBOSE){
+        iotPRINT("\n iotLogger => File path: ");
+        iotPRINTv(FILE_NAME);
+        iotPRINT("  || File size: ");
+        iotPRINTv(total_size);
+    }
+    
     return true;
 }
 
@@ -1054,12 +1111,16 @@ bool iotLoggerFile::memoryToFile(){
  */
 bool iotLoggerFile::fileToMemory(){
 
-    // STORE ORDER
-    // iotFile.println(store_index);        //uint16_t
-    // iotFile.println(consume_index);      //uint16_t
-    // iotFile.println(buffer_isCircular);  //bool (int)
-    // iotFile.println(consume_isCircular); //bool (int)
-    // iotFile.println(buffer_isPopped);    //bool (int)
+
+    enum conf_variable{
+        conf_store_index,           //uint16_t
+        conf_buffer_isCircular      //bool (int)
+    };
+
+    if(!fileExists()){
+        setErrno(FILE_NOT_EXISTS, VERBOSE);
+        return true;
+    }
 
     File iotFile;
     iotFile = SPIFFS.open(FILE_NAME, FILE_READ);
@@ -1068,23 +1129,189 @@ bool iotLoggerFile::fileToMemory(){
         return false;
     }
 
-    if(!fileExists()){
-        setErrno(FILE_NOT_EXISTS, VERBOSE);
-        return true;
+    //Setting the indexes to default values. Just to be sure.
+    resetBuffer(true);
+
+    char temp_buffer[20];           //Temporal buffer to store retrieved char array
+    unsigned long temp_ul = 9999;   //Variable to store temporal time-stamp
+    float temp_float = 9999;        //Variable to store temporal float
+    uint16_t file_index = 0;        //readBytes returns the number of char readed
+    bool config_done = false;       //Flag to mark configuratino variables loaded.
+    bool isError = false;           //Flag to mark error
+    uint8_t i = 0;                  //Config Switch index
+    uint16_t index = 0;             //Memory buffer index (data/timestamp index)
+
+    while(iotFile.available()){
+
+        if(isError)
+            break;          //Break the while.
+
+        if(!config_done){
+
+            file_index = iotFile.readBytesUntil('\n', temp_buffer, sizeof(temp_buffer));
+            temp_buffer[file_index] = 0;       //null terminator.
+
+            // Serial.println("\nCONFIG readed from file: ");
+            // Serial.print(temp_buffer);
+            // Serial.print("\0");
+
+            if( !parseUL(temp_buffer, temp_ul) ){
+                //Conversion error
+                // Serial.println("\nFirst conversion error.");
+                isError = true;
+                break;      //Break the while.
+            }
+
+
+            // Serial.print("  || Parsed as: ");
+            // Serial.print(temp_ul);
+            
+            //First 3 lines of the file, are the configuration variables.
+            switch (i)
+            {
+            case conf_store_index:
+                if(temp_ul < BUFFER_SIZE){
+                    store_index = temp_ul;
+                    i++;
+                }else{
+                    //ERROR
+                    // Serial.println("\nConf_store_index error");
+                    // isError = true;
+                }           
+            break;
+
+            case conf_buffer_isCircular:
+                if(temp_ul == 0){
+                    buffer_isCircular = false;
+                    config_done = true;
+                    break;
+                }
+
+                if(temp_ul == 1){
+                    buffer_isCircular = true;
+                    config_done = true;
+                    break;
+                }else{
+                    // Serial.println("\n Conf_buffer_isCircular error");
+                    isError = true;
+                }  
+            break;
+            }
+
+            if(isError)
+                break;  //Breaks while.
+
+        }else{      //Config DONE.
+
+            // FETCHING DATA
+            file_index = iotFile.readBytesUntil('\n', temp_buffer, sizeof(temp_buffer));
+            if(file_index == 0){    //No valid data readed.
+                isError = true;
+                break;
+            }
+                
+            temp_buffer[file_index] = 0;    //null terminator.
+            //Remember order {data , timestamp , data , timestamp , ...}
+            if( !parseFloat(temp_buffer, temp_float)){
+                isError = true;
+                break;  //break the while
+            }
+
+            // Serial.print("\n################################################");
+            // Serial.println("\n# DATA readed from file: ");
+            // Serial.println(temp_buffer);
+            // Serial.print("\n# Parsed as: ");
+            // Serial.print(temp_float);
+            // Serial.print("\n# Stored at index: ");
+            // Serial.print(index);
+            D_BUFFER[index] = temp_float;
+
+            //FETCHING TIMESTAMP
+            if(TS_MODE != NO_TIMESTAMP){
+                file_index = iotFile.readBytesUntil('\n', temp_buffer, sizeof(temp_buffer));
+                if(file_index == 0){    //No valid data readed.
+                    isError = true;
+                    break;
+                }
+
+                temp_buffer[file_index] = 0;    //null terminator.
+                if( !parseUL(temp_buffer, temp_ul)){
+                    isError = true;
+                    break;
+                }
+                // Serial.print("\n$TIMESTAMP readed from file: ");
+                // Serial.println(temp_buffer);
+                // Serial.print("\n# Parsed as: ");
+                // Serial.print(temp_ul);
+                TS_BUFFER[index] = temp_ul; //timestamp to RAM buffer.
+            }
+            index++;
+        }
+        //Seguimos con el resto...
     }
 
-    //First 5 lines of the file, are the configuration variables.
-    for(uint8_t i = 0; i<5 ; i++){
-
+    if(isError){
+        setErrno(CONVERSION_ERROR, CRITICAL);
+        iotFile.close();
+        resetBuffer();      //Some indexes or values could have changed.
+        return false;
     }
- 
+
+    setErrno(FILE_LOAD_OK, VERBOSE);
     return true;
 }
 
-bool iotLoggerFile::fileStats(){
-    // spiffs_stat s;
-    // res = SPIFFS_stat(&fs, FILE_NAME, &s);
+/**
+ * @brief Converts a char buffer containing a (unsigned long) number to unsigned long var type
+ *        If function returns false, do not trust in ul_out value!
+ * 
+ * @param str  Char buffer to convert. Must be null terminated.
+ * @param ul_out variable passed by reference to store the unsigned long. 
+ * @return TRUE - Conversion OK || FALSE -> Conversion ERROR.
+ */
+bool iotLoggerFile::parseUL(const char *str, unsigned long &ul_out){
+    char *endptr;
+    ul_out = strtoul(str, &endptr, 10);
+    // Serial.print("\n parseUL => ul_out = ");
+    // Serial.print(ul_out);
+
+    if (endptr == str || ul_out == ULONG_MAX)
+        return false;
+
     return true;
+}
+
+/**
+ * @brief Converts a char buffer containing a (float) number to float var type
+ *        If function returns false, do not trust in float_out value!
+ * 
+ * @param str  Char buffer to convert. Must be null terminated.
+ * @param float_out variable passed by reference to store the float. 
+ * @return TRUE - Conversion OK || FALSE -> Conversion ERROR.
+ */
+bool iotLoggerFile::parseFloat(const char *str, float &float_out){
+    char *endptr;
+    float_out = strtof(str, &endptr);
+    // Serial.print("\n parseFloat => float_out = ");
+    // Serial.print(float_out);
+
+    if (float_out == LONG_MAX || float_out == LONG_MIN || endptr == str)
+        return false;
+
+    return true;
+}
+
+/**
+ * @brief Prints statistics about SPIFFS memory usage.
+ * 
+ */
+void iotLoggerFile::getFileStats(){
+
+    iotPRINT("iotLogger => SPIFFS File system total bytes:");
+    iotPRINTv(SPIFFS.totalBytes());
+    iotPRINT("iotLogger => SPIFFS File system total bytes used:");
+    iotPRINTv(SPIFFS.usedBytes());
+
 }
 /**
  * @brief Checks if file exists.

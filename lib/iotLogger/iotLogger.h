@@ -20,12 +20,14 @@ enum ts_mode {
 enum iotLogger_errno {
     NO_DEBUG,
     BUF_INIT_ERROR,     /* Error allocating buffer in memory (HEAP).        */
+    INIT_ERROR_MEMORY,  /* Not enought memory to initialize buffers         */
     STORAGE_INIT_ERROR, /* Error starting SPIFFS file-system.               */
     UNEXPECTED_ERROR,   /* Found buffer data corruption.                    */
     SPIFFS_INIT_ERROR,  /* Error initializing SPIFFS File System            */
     FILE_OPEN_ERROR,    /* Error when opening SPIFFS file                   */
     FILE_DPRINT_ERROR,  /* Error when printing DATA to SPIFFS file          */
     FILE_TSPRINT_ERROR, /* Error when printing TIMESTAMP to SPIFFS file     */
+    CONVERSION_ERROR,   /* Type conversion failed                           */
     CRITICAL,           /*       ## CRITICAL ERROR SEPARATOR ##             */
     DEFRAG_ERROR,       /* Defragmentation error                            */
     BUFFER_EMPTY,       /* Buffer is empty.                                 */
@@ -36,6 +38,8 @@ enum iotLogger_errno {
     WARNING,            /*       ## WARNING ERROR SEPARATOR  ##             */
     NOT_FOUND,          /* Value not found in buffer.                       */
     DEFRAG_OK,          /* Defragmentation completed                        */
+    FILE_NOT_EXISTS,    /* Requested file doesn't exists.                   */
+    FILE_LOAD_OK,       /* File loaded to memory OK                         */
     VERBOSE,            /*       ## VERBOSE ERROR SEPARATOR  ##             */
 };
 
@@ -65,8 +69,9 @@ class iotLogger{
             ts_mode TS_MODE = AUTO_TIMESTAMP    /* Time-stamp mode to be used */
         );
 
+        ~iotLogger();   //Destructor
+
         bool init();
-        void end();
         void add(float data = 0, unsigned long timestamp = 0);
         bool getOldest(float &data_out, unsigned long &timestamp_out, bool peek = false);
         bool getOldest(float &data_out, bool peek = false);     //NO_TIMESTAMP overload
@@ -77,12 +82,13 @@ class iotLogger{
         bool dumpBuffer(uint8_t chunk_size = 0, uint16_t start = 0, uint16_t end = 0);
         bool dataAvailable();
         void printErrno(iotLogger_errno errno);
+        bool isErrno(); //check if needed.
         bool defragment();
+        void resetBuffer(bool just_indexes = false);        //HACER PROTECTED !!
     
-    protected:
+    protected:  //Can't be used directly by user, but can be used by childs.
         iotLogger_errno errno;
         uint16_t searchValidIndex();
-        void resetBuffer(bool just_indexes = false);
         bool isValidData(uint16_t index);
         void setErrno(iotLogger_errno errno,uint8_t error_level = VERBOSE);
         void getMemoryStatistics();
@@ -91,37 +97,39 @@ class iotLogger{
         void incStoreIndex();
         void incConsumeIndex();
         void consumeData(uint16_t index);
-        void empty();
 };
 
 class iotLoggerFile : public iotLogger{
 
     private:
-        const char*     FILE_NAME;                /* File-name */
-        unsigned long   store_interval = 60000*5; /* Interval [ms] to store logs to file. Default 5min */
-        unsigned long   prev_millis;              /* Used to keep track of time */
+        const char*     FILE_NAME;                  /* File-name */
+        unsigned long   store_interval;             /* Interval [ms] to store logs to file. Default 5min */
+        unsigned long   prev_millis;                /* Used to keep track of time */
 
 
     public:
         iotLoggerFile( 
-            uint16_t BUFFER_SIZE,               /* Number of elements to store (used memory x2.5 this value) */
-            const char* FILE_NAME,              /* Name of the file to store logs */
-            ts_mode TS_MODE = AUTO_TIMESTAMP,   /* Time-stamp mode to be used */
-            unsigned long STORE_INTERVAL = 60000*5       /* */
-        ) : iotLogger(BUFFER_SIZE, TS_MODE){    //Calls iotLogger constructor
-            this->FILE_NAME = FILE_NAME;        //Extra line for iotLoggerFile constructor.
+            uint16_t BUFFER_SIZE,                   /* Number of elements to store (used memory x2.5 this value) */
+            const char* FILE_NAME,                  /* Name of the file to store logs */
+            ts_mode TS_MODE = AUTO_TIMESTAMP,       /* Time-stamp mode to be used */
+            unsigned long STORE_INTERVAL = 60000*5  /* Interval [ms] to store logs to file. */
+        ) : iotLogger(BUFFER_SIZE, TS_MODE){        //Calls iotLogger constructor
+            this->FILE_NAME = FILE_NAME;            //Extra lines for iotLoggerFile constructor.
             this->store_interval = STORE_INTERVAL;
         }
 
+        ~iotLoggerFile(); //Destructor
+
         bool init();
-        bool setStoreInterval(unsigned long store_interval);
-        bool storeFileTimed();
+        void setStoreInterval(unsigned long store_interval);
+        long storeFileTimed();
         bool memoryToFile();
         bool fileToMemory();
-        bool fileStats();
+        void fileStats();
+        bool fileDelete();          //HACER PRIVATE!
+        bool parseUL(const char *str, unsigned long &ul_out); //IDEM
+        bool parseFloat(const char *str, float &float_out); //IDEM
 
     private:
         bool fileExists();
-        bool fileDelete();
-        void empty(); 
 };
