@@ -45,118 +45,118 @@ void loop() {
   // Serial.print(time_stamp);
 
   //FILE TEST
-  Serial.print("\n\n FILE TEST");
-  Serial.print("\n Filling buffer (7) \n");
-  for(i = 0; i<7 ; i++){
-    Logger.add(i+1,millis());
-    delay(10);
-  }
-  Logger.dumpBuffer();
+//   Serial.print("\n\n FILE TEST");
+//   Serial.print("\n Filling buffer (7) \n");
+//   for(i = 0; i<7 ; i++){
+//     Logger.add(i+1,millis());
+//     delay(10);
+//   }
+//   Logger.dumpBuffer();
 
-  if(Logger.memoryToFile()){
-    Serial.print("\n memoryToFile() => TRUE");
-  }else{
-    Serial.print("\n memoryToFile() => FALSE");
-  }
+//   if(Logger.memoryToFile()){
+//     Serial.print("\n memoryToFile() => TRUE");
+//   }else{
+//     Serial.print("\n memoryToFile() => FALSE");
+//   }
 
-  Logger.resetBuffer();
-  Logger.dumpBuffer();
+//   Logger.resetBuffer();
+//   Logger.dumpBuffer();
 
-  Serial.print("\n Retrieving data from FILE");
-  if( Logger.fileToMemory()){
-    Serial.print("\n fileToMemory() => TRUE");
-  }else{
-    Serial.print("\n fileToMemory() => FALSE");
-  }
-  Logger.dumpBuffer();
+//   Serial.print("\n Retrieving data from FILE");
+//   if( Logger.fileToMemory()){
+//     Serial.print("\n fileToMemory() => TRUE");
+//   }else{
+//     Serial.print("\n fileToMemory() => FALSE");
+//   }
+//   Logger.dumpBuffer();
 
-  Logger.resetBuffer();
-  Logger.fileDelete();
+//   Logger.resetBuffer();
+//   Logger.fileDelete();
 
-  Serial.print("\n Retrieving data from FILE (file deleted)");
-  if( Logger.fileToMemory()){
-    Serial.print("\n fileToMemory() => TRUE");
-  }else{
-    Serial.print("\n fileToMemory() => FALSE");
-  }
+//   Serial.print("\n Retrieving data from FILE (file deleted)");
+//   if( Logger.fileToMemory()){
+//     Serial.print("\n fileToMemory() => TRUE");
+//   }else{
+//     Serial.print("\n fileToMemory() => FALSE");
+//   }
 
-  Serial.print("\n Filling buffer (15) \n");
-  for(i = 0; i<15 ; i++){
+//   Serial.print("\n Filling buffer (15) \n");
+//   for(i = 0; i<15 ; i++){
 
-    Logger.add(i+1,millis());
-    delay(10);
-  }
-  Logger.dumpBuffer();
+//     Logger.add(i+1,millis());
+//     delay(10);
+//   }
+//   Logger.dumpBuffer();
 
-  if(Logger.memoryToFile()){
-    Serial.print("\n memoryToFile() => TRUE");
-  }else{
-    Serial.print("\n memoryToFile() => FALSE");
-  }
+//   if(Logger.memoryToFile()){
+//     Serial.print("\n memoryToFile() => TRUE");
+//   }else{
+//     Serial.print("\n memoryToFile() => FALSE");
+//   }
 
-  Serial.print("\n Consuming buffer (7)\n");
-  for(i=0 ; i<7; i++){
-    if(!Logger.getOldest(data, time_stamp)){
-      Serial.print("\n # NO DATA ");
-      continue;
-    }
-    Serial.print("\n # Time-stamp: ");
-    Serial.print(time_stamp);
-    Serial.print("   #Data: ");
-    Serial.print(data);
-  }
-  Logger.dumpBuffer();
+//   Serial.print("\n Consuming buffer (7)\n");
+//   for(i=0 ; i<7; i++){
+//     if(!Logger.getOldest(data, time_stamp)){
+//       Serial.print("\n # NO DATA ");
+//       continue;
+//     }
+//     Serial.print("\n # Time-stamp: ");
+//     Serial.print(time_stamp);
+//     Serial.print("   #Data: ");
+//     Serial.print(data);
+//   }
+//   Logger.dumpBuffer();
 
-  Serial.print("\n Retrieving data from FILE");
-  if( Logger.fileToMemory()){
-    Serial.print("\n fileToMemory() => TRUE");
-  }else{
-    Serial.print("\n fileToMemory() => FALSE");
-  }
-  Logger.dumpBuffer();
+//   Serial.print("\n Retrieving data from FILE");
+//   if( Logger.fileToMemory()){
+//     Serial.print("\n fileToMemory() => TRUE");
+//   }else{
+//     Serial.print("\n fileToMemory() => FALSE");
+//   }
+//   Logger.dumpBuffer();
 
-  Logger.resetBuffer();
+//   Logger.resetBuffer();
 
-  Serial.print("\n Filling buffer (10) \n");
-  for(i = 0; i<10 ; i++){
+//   Serial.print("\n Filling buffer (10) \n");
+//   for(i = 0; i<10 ; i++){
 
-    Logger.add(i+1,millis());
-    delay(10);
-  }
-  Logger.dumpBuffer();
+//     Logger.add(i+1,millis());
+//     delay(10);
+//   }
+//   Logger.dumpBuffer();
 
-  Serial.print("\n popWhereData \n");
-  Logger.popWhereData(time_stamp,2,false);
-  Serial.print("\nData Popped (2)- timestamp = ");
-  Serial.print(time_stamp);
-  Logger.popWhereData(time_stamp,5,false);
-  Serial.print("\nData Popped (5)- timestamp = ");
-  Serial.print(time_stamp);
-  Logger.popWhereData(time_stamp,6,false);
-  Serial.print("\nData Popped (6)- timestamp = ");
-  Serial.print(time_stamp);
-  Logger.dumpBuffer();
+//   Serial.print("\n popWhereData \n");
+//   Logger.popWhereData(time_stamp,2,false);
+//   Serial.print("\nData Popped (2)- timestamp = ");
+//   Serial.print(time_stamp);
+//   Logger.popWhereData(time_stamp,5,false);
+//   Serial.print("\nData Popped (5)- timestamp = ");
+//   Serial.print(time_stamp);
+//   Logger.popWhereData(time_stamp,6,false);
+//   Serial.print("\nData Popped (6)- timestamp = ");
+//   Serial.print(time_stamp);
+//   Logger.dumpBuffer();
 
- if(Logger.memoryToFile()){
-    Serial.print("\n memoryToFile() => TRUE");
-  }else{
-    Serial.print("\n memoryToFile() => FALSE");
-  }
+//  if(Logger.memoryToFile()){
+//     Serial.print("\n memoryToFile() => TRUE");
+//   }else{
+//     Serial.print("\n memoryToFile() => FALSE");
+//   }
 
-  Logger.resetBuffer();
+//   Logger.resetBuffer();
 
-  Serial.print("\n Retrieving data from FILE");
-  if( Logger.fileToMemory()){
-    Serial.print("\n fileToMemory() => TRUE");
-  }else{
-    Serial.print("\n fileToMemory() => FALSE");
-  }
+//   Serial.print("\n Retrieving data from FILE");
+//   if( Logger.fileToMemory()){
+//     Serial.print("\n fileToMemory() => TRUE");
+//   }else{
+//     Serial.print("\n fileToMemory() => FALSE");
+//   }
 
-  Logger.dumpBuffer();
+//   Logger.dumpBuffer();
 
-  for(;;){  //STOP
-    asm("nop");
-  }
+//   for(;;){  //STOP
+//     asm("nop");
+//   }
 
 
 //DEFRAGMENT TEST

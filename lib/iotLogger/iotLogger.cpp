@@ -1015,14 +1015,14 @@ long iotLoggerFile::storeFileTimed(){
 
         if(memoryToFile()){
             total_time = iotMillis() - time_elapsed;
-            return total_time == 0 ? 1 : total_time;
+            return total_time == 0 ? 1 : total_time;    //Time elapsed
 
         }else{
-            return -1;
+            return -1;  //Store error
         }
     }
     
-    return 0;
+    return 0;   //Not time to store yet.
 }
 
 /**
