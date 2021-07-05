@@ -50,7 +50,8 @@ class iotLogger{
         unsigned long*  TS_BUFFER;                /* Time-stamp buffer                                      */
         uint16_t        BUFFER_SIZE;              /* Size of data & time_stamp buffer (number of elements). */
         ts_mode         TS_MODE;                  /* Time-Stamp mode                                        */
-        iotLogger_errno DEBUG_LEVEL = VERBOSE;    /* Debug level.                                           */
+        iotLogger_errno DEBUG_LEVEL = VERBOSE;    /* Debug level.                                           */ 
+        iotLogger_errno errno;                                        
 
         /**** Control Variables ****/
         float           consumed_data = __FLT_MAX__;
@@ -82,7 +83,6 @@ class iotLogger{
         //bool isErrno(); //check if needed.
     
     protected:  //Can't be used directly by user, but can be used by childs.
-        iotLogger_errno errno;
         uint16_t searchValidIndex();
         void resetBuffer(bool just_indexes = false);
         bool isValidData(uint16_t index);

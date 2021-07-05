@@ -1010,7 +1010,8 @@ void iotLoggerFile::setStoreInterval(unsigned long store_interval){
 long iotLoggerFile::storeFileTimed(){
   
     if((iotMillis() - prev_millis) >= store_interval){
-        long time_elapsed = iotMillis();
+        prev_millis = iotMillis();
+        long time_elapsed = prev_millis;
         long total_time = -1;
 
         if(memoryToFile()){
